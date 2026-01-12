@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Posture Pro | Clinical Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+
+    <nav>
+        <div class="patient-info">
+            <strong>Patient ID:</strong> FHIR-P-001 | 
+            <strong>Status:</strong> <span id="conn-status">🔴 Disconnected</span>
+        </div>
+        <div class="nav-controls">
+            <button class="nav-btn" onclick="window.location.reload()">🏠 Reset</button>
+            <button class="nav-btn download" onclick="downloadReport()">📥 Export Report</button>
+        </div>
+    </nav>
+
+    <div class="timer-banner">
+        SESSION TIME: <span id="timer-display">00:00</span>
+    </div>
+
+    <div id="chart-container">
+        <div id="main-controls">
+            <button id="start-btn" class="action-btn start" onclick="initAudio()">Start Monitoring</button>
+            <button id="stop-btn" class="action-btn stop" onclick="stopMonitoring()" style="display:none;">Stop Recording</button>
+        </div>
+        
+        <div class="settings-panel">
+            <label>Limit: <span id="threshold-val">30cm</span></label>
+            <input type="range" min="10" max="60" value="30" class="slider" oninput="updateThreshold(this.value)">
+        </div>
+
+        <div id="chart"></div>
+        <div id="status-text" class="status-label">INITIALIZING...</div>
+        
+        <div class="stats-grid">
+            <div class="stat-box"><small>Distance</small><div id="dist-val">--</div></div>
+            <div class="stat-box"><small>Slouches</small><div id="slouch-count">0</div></div>
+            <div class="stat-box"><small>Eye Safety</small><div id="light-status">--</div></div>
+            <div class="stat-box"><small>Light</small><div id="light-val">--</div></div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let audioCtx = null;
+        let isMonitoring = false; // Set to false so user must click START
+        let postureThreshold = 30;
+        let slouchCounter = 0;
+        let lastStatus = "good";
+        let timerInterval;
+        let elapsedTime = 0;
+
+        // 1. Connection Monitoring
+        socket.on('connect', () => {
+            console.log("✅ Browser connected to server");
+            document.getElementById('conn-status').innerText = "🟢 Connected";
+            document.getElementById('conn-status').style.color = "#10b981";
+            document.getElementById('status-text').innerText = "READY TO START";
+        });
+
+        socket.on('disconnect', () => {
+            document.getElementById('conn-status').innerText = "🔴 Disconnected";
+            document.getElementById('conn-status').style.color = "#ef4444";
+        });
+
+        // 2. The Data Listener
+        socket.on('fhir-data', (fhir) => {
+            console.log("📥 Data In:", fhir); // Check F12 Console for this!
+
+            if (!isMonitoring) return;
+
+            const dist = fhir.component.find(c => c.code.text === "Distance").valueQuantity.value;
+            const light = fhir.component.find(c => c.code.text === "Light").valueInteger;
+
+            // Update UI Numbers
+            document.getElementById('dist-val').innerText = dist + "cm";
+            document.getElementById('light-val').innerText = light;
+
+            // Update Light Text
+            const lStatus = document.getElementById('light-status');
+            lStatus.innerText = light < 150 ? "Too Dark" : "Safe";
+            lStatus.style.color = light < 150 ? "#f59e0b" : "#10b981";
+
+            // Update Chart
+            updateVisuals(dist);
+        });
+
+        // 3. Chart & Audio Logic
+        const width = 400, height = 60;
+        const svg = d3.select("#chart").append("svg").attr("width", width).attr("height", height);
+        const bar = svg.append("rect").attr("x",0).attr("y",10).attr("height",40).attr("width",0).attr("fill","#3498db").attr("rx",5);
+
+        function updateVisuals(distance) {
+            const barWidth = Math.min((distance / 60) * width, width);
+            let isBad = (distance > postureThreshold || distance < 5);
+            bar.transition().duration(200).attr("width", barWidth).attr("fill", isBad ? "#ef4444" : "#10b981");
+
+            const statusEl = document.getElementById('status-text');
+            if (isBad) {
+                statusEl.innerText = "⚠️ SLOUCHING";
+                statusEl.className = "status-label bad";
+                if(lastStatus === "good") { 
+                    slouchCounter++; 
+                    playBeep(220, 400); 
+                    lastStatus = "bad"; 
+                }
+            } else {
+                statusEl.innerText = "✅ STABLE";
+                statusEl.className = "status-label good";
+                lastStatus = "good";
+            }
+            document.getElementById('slouch-count').innerText = slouchCounter;
+        }
+
+        function initAudio() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            isMonitoring = true;
+            document.getElementById('start-btn').style.display = 'none';
+            document.getElementById('stop-btn').style.display = 'block';
+            startTimer();
+        }
+
+        function stopMonitoring() {
+            isMonitoring = false;
+            clearInterval(timerInterval);
+            document.getElementById('stop-btn').style.display = 'none';
+            document.getElementById('start-btn').style.display = 'block';
+        }
+
+        function playBeep(freq, duration) {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration/1000);
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.start(); osc.stop(audioCtx.currentTime + duration/1000);
+        }
+
+        function startTimer() {
+            let baseTime = Date.now() - elapsedTime;
+            timerInterval = setInterval(() => {
+                elapsedTime = Date.now() - baseTime;
+                let mins = Math.floor(elapsedTime / 60000);
+                let secs = Math.floor((elapsedTime % 60000) / 1000);
+                document.getElementById('timer-display').innerText = 
+                    `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            }, 1000);
+        }
+
+        function updateThreshold(val) {
+            postureThreshold = parseInt(val);
+            document.getElementById('threshold-val').innerText = val + "cm";
+        }
+
+        function downloadReport() {
+            const data = `Report\nSlouches: ${slouchCounter}`;
+            const blob = new Blob([data], {type: 'text/plain'});
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = 'posture_report.txt'; a.click();
+        }
+    </script>
+</body>
+</html>
