@@ -17,7 +17,7 @@
         </div>
         <div class="nav-controls">
             <button class="nav-btn" onclick="window.location.reload()">🏠 Reset</button>
-            <button class="nav-btn download" onclick="downloadReport()">📥 Export Report</button>
+            <button class="nav-btn download" onclick="location.href='/export-fhir'">📥 Export FHIR</button>
         </div>
     </nav>
 
@@ -26,146 +26,193 @@
     </div>
 
     <div id="chart-container">
+        <div class="mode-selector">
+            <button id="mode-work" class="mode-btn active" onclick="setMode('work')">💼 Work</button>
+            <button id="mode-study" class="mode-btn" onclick="setMode('study')">📚 Study</button>
+            <button id="mode-relax" class="mode-btn" onclick="setMode('relax')">☕ Relax</button>
+        </div>
+
         <div id="main-controls">
             <button id="start-btn" class="action-btn start" onclick="initAudio()">Start Monitoring</button>
             <button id="stop-btn" class="action-btn stop" onclick="stopMonitoring()" style="display:none;">Stop Recording</button>
         </div>
         
         <div class="settings-panel">
-            <label>Limit: <span id="threshold-val">30cm</span></label>
-            <input type="range" min="10" max="60" value="30" class="slider" oninput="updateThreshold(this.value)">
+            <div style="margin-bottom: 15px;">
+                <label>Distance Warning Threshold: <span id="threshold-val">23cm</span></label>
+                <input type="range" min="10" max="80" value="23" class="slider" id="threshold-slider" oninput="updateThreshold(this.value)">
+            </div>
+            
+            <div>
+                <label>Light Threshold (Static): <span>500</span></label>
+            </div>
         </div>
 
-        <div id="chart"></div>
+        <div class="trend-section">
+            <small class="chart-label">Health Score Trend (0-100)</small>
+            <div id="trend-chart"></div>
+        </div>
+
         <div id="status-text" class="status-label">INITIALIZING...</div>
         
         <div class="stats-grid">
             <div class="stat-box"><small>Distance</small><div id="dist-val">--</div></div>
-            <div class="stat-box"><small>Slouches</small><div id="slouch-count">0</div></div>
-            <div class="stat-box"><small>Eye Safety</small><div id="light-status">--</div></div>
+            <div class="stat-box"><small>Violations</small><div id="slouch-count">0</div></div>
+            <div class="stat-box"><small>Health Score</small><div id="score-val" style="color:#2563eb">--</div></div>
             <div class="stat-box"><small>Light</small><div id="light-val">--</div></div>
         </div>
+    </div>
+
+    <div id="summary-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.95); z-index:2000; align-items:center; justify-content:center;">
+        <div class="modal-content" style="background:white; width:90%; max-width:500px; padding:40px; border-radius:24px; text-align:center;">
+            <h2 style="color:#0f172a;">Session Summary</h2>
+            <div id="score-circle" style="width:120px; height:120px; border-radius:50%; background:#f1f5f9; margin:20px auto; display:flex; align-items:center; justify-content:center; font-size:2rem; font-weight:800; color:#2563eb; border:8px solid #e2e8f0;">0</div>
+            <div class="stats-grid" style="text-align:left; margin-bottom:30px;">
+                <div class="stat-box"><small>Duration</small><div id="sum-time">--</div></div>
+                <div class="stat-box"><small>Good Posture</small><div id="sum-percent">--</div></div>
+                <div class="stat-box"><small>Total Violations</small><div id="sum-slouches">--</div></div>
+            </div>
+            <button class="action-btn start" onclick="closeSummary()">Close Report</button>
+        </div>
+    </div>
+
+    <div id="history-container">
+        <div class="history-header">
+            <small>Activity Log</small>
+            <button class="clear-btn" onclick="document.getElementById('log-list').innerHTML=''">Clear Log</button>
+        </div>
+        <div id="log-list"></div>
     </div>
 
     <script>
         const socket = io();
         let audioCtx = null;
-        let isMonitoring = false; // Set to false so user must click START
-        let postureThreshold = 30;
-        let slouchCounter = 0;
-        let lastStatus = "good";
+        let isMonitoring = false; 
+        let violationCounter = 0;
+        let lastStatusText = "";
         let timerInterval;
-        let elapsedTime = 0;
+        let goodDataCount = 0;
+        let totalDataCount = 0;
 
-        // 1. Connection Monitoring
         socket.on('connect', () => {
-            console.log("✅ Browser connected to server");
             document.getElementById('conn-status').innerText = "🟢 Connected";
             document.getElementById('conn-status').style.color = "#10b981";
-            document.getElementById('status-text').innerText = "READY TO START";
         });
 
-        socket.on('disconnect', () => {
-            document.getElementById('conn-status').innerText = "🔴 Disconnected";
-            document.getElementById('conn-status').style.color = "#ef4444";
-        });
-
-        // 2. The Data Listener
         socket.on('fhir-data', (fhir) => {
-            console.log("📥 Data In:", fhir); // Check F12 Console for this!
+            try {
+                const distComp = fhir.component.find(c => c.code.text === "Distance");
+                const lightComp = fhir.component.find(c => c.code.text === "Light");
+                
+                const dist = distComp.valueQuantity.value;
+                const light = lightComp.valueInteger;
+                const score = fhir.valueInteger;
+                const statusText = fhir.statusText; // Status from server logic
 
-            if (!isMonitoring) return;
+                // Update numerical UI
+                document.getElementById('dist-val').innerText = dist + "cm";
+                document.getElementById('light-val').innerText = light;
+                document.getElementById('score-val').innerText = score + "%";
 
-            const dist = fhir.component.find(c => c.code.text === "Distance").valueQuantity.value;
-            const light = fhir.component.find(c => c.code.text === "Light").valueInteger;
+                // Update Visual States based on statusText
+                const statusEl = document.getElementById('status-text');
+                statusEl.innerText = statusText;
 
-            // Update UI Numbers
-            document.getElementById('dist-val').innerText = dist + "cm";
-            document.getElementById('light-val').innerText = light;
+                if (statusText === "Healthy State") {
+                    statusEl.className = "status-label good";
+                } else if (statusText.includes("Warning")) {
+                    statusEl.className = "status-label warning"; // Add .warning to your CSS
+                } else {
+                    statusEl.className = "status-label bad";
+                }
 
-            // Update Light Text
-            const lStatus = document.getElementById('light-status');
-            lStatus.innerText = light < 150 ? "Too Dark" : "Safe";
-            lStatus.style.color = light < 150 ? "#f59e0b" : "#10b981";
-
-            // Update Chart
-            updateVisuals(dist);
+                if (isMonitoring) {
+                    totalDataCount++;
+                    if (statusText === "Healthy State") goodDataCount++;
+                    
+                    // Trigger alert on True Violation change
+                    if (statusText === "TRUE POSTURAL VIOLATION" && lastStatusText !== "TRUE POSTURAL VIOLATION") {
+                        violationCounter++;
+                        playBeep(220, 600); // Longer beep for violation
+                        addLogEntry('bad', `Critical Violation: 10s poor light detected.`);
+                    }
+                    
+                    lastStatusText = statusText;
+                    document.getElementById('slouch-count').innerText = violationCounter;
+                    updateTrend(score);
+                }
+            } catch (err) {
+                console.error("Logic Error:", err);
+            }
         });
 
-        // 3. Chart & Audio Logic
-        const width = 400, height = 60;
-        const svg = d3.select("#chart").append("svg").attr("width", width).attr("height", height);
-        const bar = svg.append("rect").attr("x",0).attr("y",10).attr("height",40).attr("width",0).attr("fill","#3498db").attr("rx",5);
+        // --- D3 TREND CHART (UNCHANGED) ---
+        const trendData = [];
+        const maxPoints = 25; 
+        const trendWidth = 500, trendHeight = 100;
+        const trendSvg = d3.select("#trend-chart").append("svg").attr("viewBox", `0 0 ${trendWidth} ${trendHeight}`);
+        const x = d3.scaleLinear().domain([0, maxPoints - 1]).range([0, trendWidth]);
+        const y = d3.scaleLinear().domain([0, 100]).range([trendHeight - 5, 5]);
+        const line = d3.line().x((d, i) => x(i)).y(d => y(d)).curve(d3.curveBasis); 
+        const path = trendSvg.append("path").datum(trendData).attr("fill", "none").attr("stroke", "#2563eb").attr("stroke-width", 3);
 
-        function updateVisuals(distance) {
-            const barWidth = Math.min((distance / 60) * width, width);
-            let isBad = (distance > postureThreshold || distance < 5);
-            bar.transition().duration(200).attr("width", barWidth).attr("fill", isBad ? "#ef4444" : "#10b981");
-
-            const statusEl = document.getElementById('status-text');
-            if (isBad) {
-                statusEl.innerText = "⚠️ SLOUCHING";
-                statusEl.className = "status-label bad";
-                if(lastStatus === "good") { 
-                    slouchCounter++; 
-                    playBeep(220, 400); 
-                    lastStatus = "bad"; 
-                }
-            } else {
-                statusEl.innerText = "✅ STABLE";
-                statusEl.className = "status-label good";
-                lastStatus = "good";
-            }
-            document.getElementById('slouch-count').innerText = slouchCounter;
+        function updateTrend(newScore) {
+            trendData.push(newScore);
+            if (trendData.length > maxPoints) trendData.shift(); 
+            path.datum(trendData).transition().duration(200).attr("d", line);
         }
 
+        // --- SESSION CONTROLS ---
         function initAudio() {
             if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             isMonitoring = true;
             document.getElementById('start-btn').style.display = 'none';
             document.getElementById('stop-btn').style.display = 'block';
             startTimer();
+            addLogEntry('good', "Monitoring Session Started");
         }
 
         function stopMonitoring() {
             isMonitoring = false;
             clearInterval(timerInterval);
-            document.getElementById('stop-btn').style.display = 'none';
-            document.getElementById('start-btn').style.display = 'block';
+            showSummary(); 
+        }
+
+        function showSummary() {
+            const finalScore = totalDataCount > 0 ? Math.round((goodDataCount / totalDataCount) * 100) : 0;
+            document.getElementById('score-circle').innerText = finalScore + "%";
+            document.getElementById('sum-time').innerText = document.getElementById('timer-display').innerText;
+            document.getElementById('sum-slouches').innerText = violationCounter;
+            document.getElementById('sum-percent').innerText = finalScore + "%";
+            document.getElementById('summary-modal').style.display = 'flex';
+        }
+
+        function closeSummary() { location.reload(); }
+
+        function addLogEntry(type, message) {
+            const entry = document.createElement('div');
+            entry.className = `log-item ${type}`;
+            entry.innerHTML = `<span class="log-time">${new Date().toLocaleTimeString()}</span> ${message}`;
+            document.getElementById('log-list').prepend(entry);
         }
 
         function playBeep(freq, duration) {
             if (!audioCtx) return;
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
-            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration/1000);
+            osc.frequency.value = freq;
             osc.connect(gain); gain.connect(audioCtx.destination);
             osc.start(); osc.stop(audioCtx.currentTime + duration/1000);
         }
 
         function startTimer() {
-            let baseTime = Date.now() - elapsedTime;
+            let start = Date.now();
             timerInterval = setInterval(() => {
-                elapsedTime = Date.now() - baseTime;
-                let mins = Math.floor(elapsedTime / 60000);
-                let secs = Math.floor((elapsedTime % 60000) / 1000);
-                document.getElementById('timer-display').innerText = 
-                    `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                let diff = Math.floor((Date.now() - start) / 1000);
+                let m = Math.floor(diff / 60).toString().padStart(2, '0');
+                let s = (diff % 60).toString().padStart(2, '0');
+                document.getElementById('timer-display').innerText = `${m}:${s}`;
             }, 1000);
-        }
-
-        function updateThreshold(val) {
-            postureThreshold = parseInt(val);
-            document.getElementById('threshold-val').innerText = val + "cm";
-        }
-
-        function downloadReport() {
-            const data = `Report\nSlouches: ${slouchCounter}`;
-            const blob = new Blob([data], {type: 'text/plain'});
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url; a.download = 'posture_report.txt'; a.click();
         }
     </script>
 </body>

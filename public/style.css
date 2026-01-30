@@ -1,80 +1,172 @@
+/* --- 1. CORE RESET & BASE STYLES --- */
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 body { 
-    font-family: 'Segoe UI', system-ui, sans-serif; 
-    background-color: #f8fafc; 
+    font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; 
+    background-color: #f1f5f9; 
     color: #1e293b;
     display: flex;
     flex-direction: column;
     align-items: center;
     padding: 20px;
+    line-height: 1.5;
+    transition: background-color 0.8s ease, color 0.8s ease;
 }
 
-/* Toast Notification */
-#success-toast {
-    position: fixed;
-    top: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: #064e3b;
-    color: #ecfdf5;
-    padding: 15px 25px;
-    border-radius: 16px;
-    z-index: 1000;
-    transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    border: 1px solid #059669;
+/* --- AMBIENT DARK MODE THEME --- */
+body.ambient-dark {
+    background-color: #0f172a !important;
+    color: #f1f5f9 !important;
 }
 
-.toast-hidden { opacity: 0; top: -100px !important; }
-.toast-visible { opacity: 1; top: 20px !important; }
-.toast-content { display: flex; align-items: center; gap: 15px; }
-.medal-icon { font-size: 2rem; }
+body.ambient-dark nav,
+body.ambient-dark #chart-container, 
+body.ambient-dark #history-container,
+body.ambient-dark .trend-section,
+body.ambient-dark .log-item,
+body.ambient-dark .settings-panel,
+body.ambient-dark .stat-box {
+    background-color: #1e293b !important;
+    border-color: #334155 !important;
+    color: #f1f5f9;
+}
 
-/* Dashboard UI */
+body.ambient-dark .stat-box div {
+    color: #f1f5f9 !important;
+}
+
+body.ambient-dark .mode-btn {
+    background-color: #334155;
+    color: #cbd5e1;
+    border-color: #475569;
+}
+
+/* --- 2. NAVIGATION & PATIENT INFO --- */
 nav { 
-    width: 100%; max-width: 600px; 
+    width: 100%; max-width: 700px; 
     background: white; padding: 15px 25px; 
     border-radius: 16px; display: flex; justify-content: space-between; align-items: center;
-    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); margin-bottom: 20px;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 20px;
+    transition: all 0.5s ease;
 }
 
-.patient-info { font-size: 0.85rem; color: #64748b; }
+.patient-info { font-size: 0.85rem; color: #64748b; font-weight: 500; }
 
-.nav-btn { padding: 8px 16px; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; background: #e2e8f0; }
-.nav-btn.download { background: #10b981; color: white; margin-left: 8px; }
+.nav-btn { padding: 8px 16px; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; background: #e2e8f0; transition: 0.2s; }
+.nav-btn:hover { background: #cbd5e1; }
+.nav-btn.download { background: #2563eb; color: white; margin-left: 8px; }
 
+/* --- 3. SESSION TIMER --- */
 .timer-banner {
-    background: #0f172a; color: #4ade80; padding: 10px 30px;
-    border-radius: 100px; font-family: monospace; font-size: 1.5rem;
+    background: #0f172a; color: #4ade80; padding: 10px 32px;
+    border-radius: 100px; font-family: 'JetBrains Mono', monospace; font-size: 1.5rem;
     font-weight: bold; margin-bottom: 20px; border: 2px solid #1e293b;
+    box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
 }
 
+/* --- 4. MAIN DASHBOARD CONTAINER --- */
 #chart-container {
-    background: white; width: 100%; max-width: 600px; padding: 30px;
-    border-radius: 24px; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1); text-align: center;
+    background: white; width: 100%; max-width: 700px; padding: 30px;
+    border-radius: 24px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); text-align: center;
+    margin-bottom: 20px;
+    transition: all 0.5s ease;
 }
+
+.mode-selector { display: flex; gap: 10px; margin-bottom: 24px; }
+.mode-btn { 
+    flex: 1; padding: 12px; border-radius: 12px; border: 1px solid #e2e8f0; 
+    background: white; cursor: pointer; font-weight: 600; transition: 0.2s; 
+}
+.mode-btn.active { background: #2563eb; color: white; border-color: #2563eb; }
 
 .action-btn {
     width: 100%; padding: 18px; border-radius: 12px; border: none;
     font-size: 1.1rem; font-weight: bold; cursor: pointer; margin-bottom: 20px;
+    transition: transform 0.1s;
 }
-
+.action-btn:active { transform: scale(0.98); }
 .action-btn.start { background: #2563eb; color: white; }
 .action-btn.stop { background: #f59e0b; color: white; }
 
-.settings-panel { background: #f1f5f9; padding: 15px; border-radius: 12px; text-align: left; margin-bottom: 20px; }
-.slider { width: 100%; margin-top: 10px; accent-color: #2563eb; }
+.settings-panel { 
+    background: #f8fafc; padding: 15px; border-radius: 12px; 
+    text-align: left; margin-bottom: 24px; border: 1px solid #e2e8f0; 
+}
+.slider { width: 100%; margin-top: 10px; accent-color: #2563eb; cursor: pointer; }
 
-.status-label { display: inline-block; padding: 12px 30px; border-radius: 100px; font-weight: 900; margin: 20px 0; }
-.good { background: #dcfce7; color: #166534; }
-.bad { background: #fee2e2; color: #991b1b; border: 2px solid #fecaca; }
+/* --- 5. TREND CHART SECTION --- */
+.trend-section {
+    background: #ffffff; padding: 15px; border-radius: 16px; 
+    margin-bottom: 24px; border: 1px solid #e2e8f0; text-align: left;
+}
+.chart-label { 
+    display: block; color: #94a3b8; font-weight: 700; 
+    text-transform: uppercase; font-size: 0.65rem; margin-bottom: 10px; 
+}
+#trend-chart svg { width: 100%; height: auto; display: block; }
 
-.stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.stat-box { background: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 12px; }
-.stat-box small { font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; }
-.stat-box div { font-size: 1.4rem; font-weight: 800; margin-top: 4px; }
+/* --- 6. UPDATED STATUS LABELS --- */
+.status-label { 
+    display: inline-block; padding: 12px 30px; border-radius: 100px; 
+    font-weight: 900; margin: 20px 0; font-size: 0.9rem;
+    text-transform: uppercase;
+    transition: all 0.3s ease;
+}
 
-#history-container { width: 100%; max-width: 600px; margin-top: 30px; }
-.log-item { background: white; padding: 12px 20px; margin-bottom: 8px; border-radius: 10px; display: flex; justify-content: space-between; border-left: 6px solid #e2e8f0; }
-.log-item.good { border-left-color: #10b981; }
+/* Healthy State */
+.good { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+
+/* NEW: Warning State (Distance threshold) */
+.warning { background: #fff7ed; color: #9a3412; border: 1px solid #ffedd5; border-width: 2px; }
+
+/* Bad State (True Postural Violation) */
+.bad { 
+    background: #fee2e2; color: #991b1b; border: 2px solid #fecaca; 
+    animation: critical-shake 0.5s infinite; 
+}
+
+@keyframes critical-shake {
+    0% { transform: translateX(0); }
+    25% { transform: translateX(-4px); }
+    50% { transform: translateX(4px); }
+    75% { transform: translateX(-4px); }
+    100% { transform: translateX(0); }
+}
+
+/* --- 7. STATS GRID --- */
+.stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.stat-box { 
+    background: #ffffff; border: 1px solid #e2e8f0; padding: 20px; 
+    border-radius: 16px; text-align: left; transition: all 0.2s; 
+}
+.stat-box:hover { border-color: #2563eb; transform: translateY(-2px); }
+.stat-box small { font-size: 0.7rem; color: #94a3b8; font-weight: 700; text-transform: uppercase; }
+.stat-box div { font-size: 1.6rem; font-weight: 800; margin-top: 4px; color: #0f172a; }
+#score-val { color: #2563eb; }
+
+/* --- 8. HISTORY LOG SECTION --- */
+#history-container { width: 100%; max-width: 700px; margin-top: 10px; text-align: left; }
+.history-header { display: flex; justify-content: space-between; align-items: center; padding: 0 10px 10px 10px; }
+.history-header small { font-weight: 800; color: #64748b; text-transform: uppercase; font-size: 0.75rem; }
+
+.log-item {
+    background: white; padding: 12px 20px; margin-bottom: 8px;
+    border-radius: 12px; display: flex; gap: 15px; align-items: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02); border-left: 5px solid #e2e8f0;
+    font-size: 0.9rem; animation: slideIn 0.3s ease-out;
+}
 .log-item.bad { border-left-color: #ef4444; }
+.log-item.good { border-left-color: #10b981; }
+.log-time { font-family: monospace; font-weight: bold; color: #94a3b8; }
+
+@keyframes slideIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* --- 9. SUMMARY MODAL --- */
+#summary-modal {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(15, 23, 42, 0.95); z-index: 2000;
+    display: none; align-items: center; justify-content: center;
+}
